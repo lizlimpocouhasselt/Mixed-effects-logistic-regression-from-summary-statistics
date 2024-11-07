@@ -78,7 +78,7 @@ Then we generate pseudo-data matching up to the 3rd sample moments of the actual
 # B. Specify the variable names
 y_name <- all.vars(formula)[1]
 names_ind_vars <- all.vars(formula)[-1]
-numeric_var_names <- c('std_pan_day','std_age')
+numeric_var_names <- c('drive_thru_ind','std_pan_day','std_age')
 
 # C. Generate pseudo-data ------
 set.seed(121314)
@@ -93,7 +93,8 @@ summary(glmm_pseudo_3rd)
 
 # Compare with model based on actual [pre-processed] data
 id_data <- "1QtTwfyKIvuPvg6uP1ZmZWp5vRIA8eHDS"
-pooled_actual_data <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_data))
+data <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_data))
+data$patient_class <- factor(data$patient_class, levels = c("inpatient", "emergency", "outpatient"))
 glmm_actual <- glmer(ifelse(result == 'negative', 0, 1) ~ gender + patient_class + drive_thru_ind + scale(pan_day) + scale(age) + (1|clinic_name), data, family = binomial)
 summary(glmm_actual)
 
