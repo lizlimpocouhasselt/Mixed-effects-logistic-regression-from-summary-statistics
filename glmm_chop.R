@@ -448,7 +448,8 @@ glmm_pseudo_4th <- glmer(formula <- resultpositive ~ gendermale + patient_classe
 
 # Estimate a mixed effects logistic regression model from actual data
 id_data <- "1QtTwfyKIvuPvg6uP1ZmZWp5vRIA8eHDS"
-pooled_actual_data <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_data))
+data <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_data))
+data$patient_class <- factor(data$patient_class, levels = c("inpatient", "emergency", "outpatient"))
 glmm_actual <- glmer(ifelse(result == 'negative', 0, 1) ~ gender + patient_class + drive_thru_ind + scale(pan_day) + scale(age) + (1|clinic_name), data, family = binomial)
 
 
