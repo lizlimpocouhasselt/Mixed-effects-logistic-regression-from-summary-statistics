@@ -1,4 +1,4 @@
-# Prepare functions to compute central moments
+# Prepare functions to compute joint central moments
 mv_moment_3_4_bypair <- function(a,b,n){
   a2b <- sum((a-mean(a))^2 * (b-mean(b)))/n
   ab2 <- sum((a-mean(a)) * (b-mean(b))^2)/n
@@ -19,21 +19,32 @@ mv_moment_4 <- function(a,b,c,d,n){
   abcd
 }
 
+# Define function that computes summary statistics per cluster
+# Here we assume that one data custodian holds all the individual-level data of all clusters
+# The first part computes the summary statistics for unstandardized variables. The data provider must do this and hand the resulting summary information to the data analyst.
+# The second part computes the summary statistics assuming that the numeric variables have been standardized. This is computed by the data analyst using the "raw" summary information supplied by the data provider. The purpose of this is to facilitate pseudo-data generation.
+
 fn_compute_summary <- function(data, grouping_name, numeric_var_names){
-  data <- as.data.frame(cbind(model.matrix(~-1+., data[,!(names(data) == grouping_name)]),
-                data[, grouping_name]))
+  
+  # I. DATA PROVIDER'S TASK -------------------------------
+  # Create dummy variables for categorical variables
+  data <- as.data.frame(cbind(
+    model.matrix(~-1+., data[,!(names(data) == grouping_name)]),
+    data[, grouping_name]))
   names(data)[length(names(data))] <- grouping_name
+  
+  # List down names for multivariate sample moments
   wxyz <- combn(names(data)[!(names(data) == grouping_name)], 4) 
   xyz <- combn(names(data)[!(names(data) == grouping_name)], 3) 
   xy <- combn(names(data)[!(names(data) == grouping_name)], 2) 
   
-  # Prepare summary statistics (data provider task) ------------------
   
-  # Break up data per group
+  # Break up data per group / cluster
   group_data_design_df <- data %>% split(f = as.factor(.[,grouping_name]))
   m <- length(group_data_design_df)
   n_i <- data %>% count(.data[[grouping_name]]) %>% dplyr::select(n)
   
+  # Construct dataframe for univariate summary statistics
   summary_stats <- lapply(1:m, function(group_num){
     data.frame(variable = names(data)[names(data) != grouping_name],
                type = ifelse(names(data)[names(data) != grouping_name] %in% numeric_var_names, 'num', 'bin'),
@@ -45,8 +56,10 @@ fn_compute_summary <- function(data, grouping_name, numeric_var_names){
                row.names = NULL)
   })
   
+  # Construct sample covariance matrix
   var_cov_mat <- lapply(1:m, function(group_num) cov(group_data_design_df[[group_num]][, names(data) != grouping_name]))
   
+  # Construct dataframe for bivariate (3rd & 4th order) joint sample central moments
   mv_moment_3_4_bypair_df <- lapply(1:m, function(group_num){
     data.frame(vars = apply(xy, 2, function(x) paste0(t(x)[, 1], "_", t(x)[, 2])),
                a2b = sapply(1:dim(xy)[2], function(x) mv_moment_3_4_bypair(group_data_design_df[[group_num]][, xy[1,x]], group_data_design_df[[group_num]][, xy[2,x]], n_i[group_num,])$a2b),
@@ -57,6 +70,7 @@ fn_compute_summary <- function(data, grouping_name, numeric_var_names){
     )
   })
   
+  # Construct dataframe for trivariate joint sample central moments
   mv_moment_3_4_by3_df <- lapply(1:m, function(group_num){
     data.frame(vars = apply(xyz, 2, function(x) paste0(t(x)[, 1], "_", t(x)[, 2],"_", t(x)[, 3])),
                abc = sapply(1:dim(xyz)[2], function(x) mv_moment_3_4_by3(group_data_design_df[[group_num]][, xyz[1,x]], group_data_design_df[[group_num]][, xyz[2,x]], group_data_design_df[[group_num]][, xyz[3,x]], n_i[group_num,])$abc),
@@ -65,13 +79,17 @@ fn_compute_summary <- function(data, grouping_name, numeric_var_names){
                abc2 = sapply(1:dim(xyz)[2], function(x) mv_moment_3_4_by3(group_data_design_df[[group_num]][, xyz[1,x]], group_data_design_df[[group_num]][, xyz[2,x]], group_data_design_df[[group_num]][, xyz[3,x]], n_i[group_num,])$abc2))
   })
   
+  # Construct dataframe for quadvariate joint sample central moments
   mv_moment_4_df <- lapply(1:m, function(group_num){
     data.frame(vars = apply(wxyz, 2, function(x) paste0(t(x)[, 1], "_", t(x)[, 2],"_", t(x)[, 3], "_", t(x)[, 4])),
                abcd = sapply(1:dim(wxyz)[2], function(x) mv_moment_4(group_data_design_df[[group_num]][, wxyz[1,x]], group_data_design_df[[group_num]][, wxyz[2,x]], group_data_design_df[[group_num]][, wxyz[3,x]], group_data_design_df[[group_num]][, wxyz[4,x]], n_i[group_num,]))
     )
   })
   
-  # Compute central moments of standardized numeric variables (data analyst task) ------------------
+  # II. DATA ANALYST'S TASK -------------------------------
+
+  # Compute sample central moments assuming standardized numeric variables
+  ## Univariate summary statistics
   summary_stats <- lapply(1:m, function(group_num){
     cbind(summary_stats[[group_num]],
           std_mean = apply(summary_stats[[group_num]][,c('type','mean')], 1, function(x) ifelse(x[1] == 'num', 0, as.numeric(x[2]))),
@@ -79,17 +97,17 @@ fn_compute_summary <- function(data, grouping_name, numeric_var_names){
           std_target_3_moment = apply(summary_stats[[group_num]][,c('type','variance','target_3_moment')], 1, function(x) ifelse(x[1] == 'num' & as.numeric(x[2]) > 0, as.numeric(x[3])/sqrt(as.numeric(x[2]))^3, as.numeric(x[3]))),
           std_target_4_moment = apply(summary_stats[[group_num]][,c('type','variance','target_4_moment')], 1, function(x) ifelse(x[1] == 'num' & as.numeric(x[2]) > 0, as.numeric(x[3])/sqrt(as.numeric(x[2]))^4, as.numeric(x[3]))))
   })
-  
+  ## Covariance matrix
   for(numeric_var_name in numeric_var_names){
     var_cov_mat <- lapply(1:m, function(group_num){
       sd_orig <- sqrt(var_cov_mat[[group_num]][numeric_var_name, numeric_var_name])
-      var_cov_mat[[group_num]][numeric_var_name, ] <- ifelse(rep(sd_orig, dim(var_cov_mat[[group_num]])[2]) > 0, var_cov_mat[[group_num]][numeric_var_name, ]/sd_orig, 0)
-      var_cov_mat[[group_num]][, numeric_var_name] <- ifelse(rep(sd_orig, dim(var_cov_mat[[group_num]])[1]) > 0, var_cov_mat[[group_num]][, numeric_var_name]/sd_orig, 0)
+      var_cov_mat[[group_num]][numeric_var_name, ] <- ifelse(rep(sd_orig, ncol(var_cov_mat[[group_num]])) > 0, var_cov_mat[[group_num]][numeric_var_name, ]/sd_orig, 0)
+      var_cov_mat[[group_num]][, numeric_var_name] <- ifelse(rep(sd_orig, nrow(var_cov_mat[[group_num]])) > 0, var_cov_mat[[group_num]][, numeric_var_name]/sd_orig, 0)
       var_cov_mat[[group_num]][numeric_var_name, numeric_var_name] <- ifelse(sd_orig > 0, 1, 0)
       var_cov_mat[[group_num]]
     })
   }
-  
+  ## Bivariate summary statistics (3rd and 4th order)
   for(numeric_var_name in numeric_var_names){
     mv_moment_3_4_bypair_df <- lapply(1:m, function(group_num){
       var_orig <- summary_stats[[group_num]][summary_stats[[group_num]][,'variable'] == numeric_var_name, 'variance']
@@ -106,7 +124,7 @@ fn_compute_summary <- function(data, grouping_name, numeric_var_names){
       mv_moment_3_4_bypair_df[[group_num]]
     })
   }
-  
+  ## Trivariate summary statistics (3rd and 4th order)
   for(numeric_var_name in numeric_var_names){
     mv_moment_3_4_by3_df <- lapply(1:m, function(group_num){
       var_orig <- summary_stats[[group_num]][summary_stats[[group_num]][,'variable'] == numeric_var_name, 'variance']
@@ -120,7 +138,7 @@ fn_compute_summary <- function(data, grouping_name, numeric_var_names){
       mv_moment_3_4_by3_df[[group_num]]
     })
   }
-  
+  ## Quadvariate summary statistics (4th order)
   for(numeric_var_name in numeric_var_names){
     mv_moment_4_df <- lapply(1:m, function(group_num){
       var_orig <- summary_stats[[group_num]][summary_stats[[group_num]][,'variable'] == numeric_var_name, 'variance']
@@ -128,6 +146,7 @@ fn_compute_summary <- function(data, grouping_name, numeric_var_names){
       mv_moment_4_df[[group_num]]
     }) 
   }
+  names(summary_stats) <- names(var_cov_mat) <- names(mv_moment_3_4_bypair_df) <- names(mv_moment_3_4_by3_df) <- names(mv_moment_4_df) <- names(group_data_design_df)
   
   return(list(summary_stats, var_cov_mat, mv_moment_3_4_bypair_df, mv_moment_3_4_by3_df, mv_moment_4_df))
   

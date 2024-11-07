@@ -66,26 +66,97 @@ mv_moment_3_4_bypair_df <- summary_info[[3]]
 mv_moment_3_4_by3_df <- summary_info[[4]]
 mv_moment_4_df <- summary_info[[5]]
 
+# Merge all dataframes into one
+summary_stats_one <- do.call(rbind, summary_stats)
+row.names(summary_stats_one) <- NULL
+summary_stats_one$clinic_name <- rep(names(summary_stats), 
+                                     each = nrow(summary_stats[[1]]))
+var_cov_mat_one <- as.data.frame(do.call(rbind, var_cov_mat))
+var_cov_mat_one$clinic_name <- rep(names(var_cov_mat), 
+                                   each = nrow(var_cov_mat[[1]]))
+mv_moment_3_4_bypair_df_one <- do.call(rbind, mv_moment_3_4_bypair_df)
+row.names(mv_moment_3_4_bypair_df_one) <- NULL
+mv_moment_3_4_bypair_df_one$clinic_name <- rep(names(mv_moment_3_4_bypair_df), 
+                                     each = nrow(mv_moment_3_4_bypair_df[[1]]))
+mv_moment_3_4_by3_df_one <- do.call(rbind, mv_moment_3_4_by3_df)
+row.names(mv_moment_3_4_by3_df_one) <- NULL
+mv_moment_3_4_by3_df_one$clinic_name <- rep(names(mv_moment_3_4_by3_df), 
+                                               each = nrow(mv_moment_3_4_by3_df[[1]]))
+mv_moment_4_df_one <- do.call(rbind, mv_moment_4_df)
+row.names(mv_moment_4_df_one) <- NULL
+mv_moment_4_df_one$clinic_name <- rep(names(mv_moment_4_df), 
+                                            each = nrow(mv_moment_4_df[[1]]))
+
+# Save summary statistics and preprocessed data
+write.csv(data, file = "actual_data_preprocessed_chop.csv")
+write.csv(summary_stats_one, file = "summary_stats_chop.csv")
+write.csv(var_cov_mat_one, file = "var_cov_mat_chop.csv")
+write.csv(mv_moment_3_4_bypair_df_one, file = "mv_moment_3_4_bypair_df_chop.csv")
+write.csv(mv_moment_3_4_by3_df_one, file = "mv_moment_3_4_by3_df_chop.csv")
+write.csv(mv_moment_4_df_one, file = "mv_moment_4_df_chop.csv")
 
 
 
 #---------------- DATA ANALYST TASK ----------------
 
 # I. Generate pseudo-data
-## A. Specify model (optional)
+## A. Load summary data
+id_summary_stats <- "1QvRKaP6APPyoI4Nt5AlVFUxdlhiuP-y5"
+summary_stats_one <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_summary_stats))
+summary_stats <- summary_stats_one %>% 
+  dplyr::select(-1) %>% 
+  split(f = as.factor(.$clinic_name)) %>%
+  lapply(function(df){
+    df[-ncol(df)]
+  })
+id_var_cov_mat <- "1QuJp4NYJzP83L-_4a5alpIZ8vasUV3sW"
+var_cov_mat_one <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_var_cov_mat))
+var_cov_mat <- var_cov_mat_one %>% 
+  dplyr::select(-1) %>%
+  split(f = as.factor(.$clinic_name)) %>%
+  lapply(function(df) {
+    rownames(df) <- colnames(df)[-ncol(df)]
+    return(as.matrix(df[-ncol(df)]))
+  })
+id_mv_moment_3_4_bypair_df <- "1QxD5ncIfskJcQ9SWHW6W9yeRrvYRFtyZ"
+mv_moment_3_4_bypair_df_one <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_mv_moment_3_4_bypair_df))
+mv_moment_3_4_bypair_df <- mv_moment_3_4_bypair_df_one %>% 
+  dplyr::select(-1) %>% 
+  split(f = as.factor(.$clinic_name)) %>%
+  lapply(function(df){
+    df[-ncol(df)]
+  })
+id_mv_moment_3_4_by3_df <- "1R18kceggqu4YNO7I_xSHrRRigT1JrUGC"
+mv_moment_3_4_by3_df_one <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_mv_moment_3_4_by3_df))
+mv_moment_3_4_by3_df <- mv_moment_3_4_by3_df_one %>% 
+  dplyr::select(-1) %>% 
+  split(f = as.factor(.$clinic_name)) %>%
+  lapply(function(df){
+    df[-ncol(df)]
+  })
+id_mv_moment_4_df <- "1R3WDwBqO6vn261mH52Jo3VEGUGENW826"
+mv_moment_4_df_one <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_mv_moment_4_df))
+mv_moment_4_df <- mv_moment_4_df_one %>% 
+  dplyr::select(-1) %>% 
+  split(f = as.factor(.$clinic_name)) %>%
+  lapply(function(df){
+    df[-ncol(df)]
+  })
+
+## B. Specify model (optional)
 formula <- resultpositive ~ gendermale + patient_classemergency + patient_classoutpatient + drive_thru_ind + std_pan_day + std_age
 
-## B. Specify the variable names
+## C. Specify the variable names
 y_name <- all.vars(formula)[1]
 names_ind_vars <- all.vars(formula)[-1]
 
-## C. Generate pseudo-data
+## D. Generate pseudo-data
 set.seed(121314)
 pseudodata_2ndmom <- fn_pseudodata_2ndmom_glmm(y_name, names_ind_vars, numeric_var_names, summary_stats, var_cov_mat)
 pseudodata_3rdmom <- fn_pseudodata_3rdmom_glmm(y_name, names_ind_vars, numeric_var_names, summary_stats, var_cov_mat, mv_moment_3_4_bypair_df, mv_moment_3_4_by3_df, mv_moment_4_df)
 pseudodata_4thmom <- fn_pseudodata_4thmom_glmm(y_name, names_ind_vars, numeric_var_names, summary_stats, var_cov_mat, mv_moment_3_4_bypair_df, mv_moment_3_4_by3_df, mv_moment_4_df)
 
-## D. Compare summary statistics between actual and pseudo-data
+## E. Compare summary statistics between actual and pseudo-data
 ### 1. Compute summary statistics of pseudo-data
 summary_info_ps2 <- fn_compute_summary(do.call(rbind, pseudodata_2ndmom), 'level2', numeric_var_names[4:5])
 summary_info_ps3 <- fn_compute_summary(do.call(rbind, pseudodata_3rdmom), 'level2', numeric_var_names[4:5])
@@ -376,6 +447,8 @@ glmm_pseudo_4th <- glmer(formula <- resultpositive ~ gendermale + patient_classe
 #---------------- COMPARISON WITH ACTUAL DATA ----------------
 
 # Estimate a mixed effects logistic regression model from actual data
+id_data <- "1QtTwfyKIvuPvg6uP1ZmZWp5vRIA8eHDS"
+pooled_actual_data <- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_data))
 glmm_actual <- glmer(ifelse(result == 'negative', 0, 1) ~ gender + patient_class + drive_thru_ind + scale(pan_day) + scale(age) + (1|clinic_name), data, family = binomial)
 
 
@@ -385,6 +458,11 @@ summary(glmm_pseudo_2nd)
 summary(glmm_pseudo_3rd)
 summary(glmm_pseudo_4th)
 summary(glmm_actual)
+
+AIC(glmm_pseudo_2nd)
+AIC(glmm_pseudo_3rd)
+AIC(glmm_pseudo_4th)
+AIC(glmm_actual)
 
 confint(glmm_pseudo_2nd, devmatchtol = 1e-04)
 ci.ps3 <- confint(glmm_pseudo_3rd, devmatchtol = 1e-04)
