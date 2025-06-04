@@ -1,0 +1,60 @@
+#---------------------------------------------------------------
+# FUNCTION TO GENERATE PSEUDO-DATA (K = 2)
+# INPUTS:
+#   y_name : response variable name
+#   names_ind_vars : covariate names
+#   numeric_var_names : numeric covariate names
+#   mean_cov : list of cluster univariate summary statistics
+#   var_cov_mat : list of cluster variance-covariance matrices
+#
+# OUTPUT: 
+#   dataframe of pseudo-data
+#---------------------------------------------------------------
+
+fn_pseudodata_2ndmom_glmm <- function(y_name, names_ind_vars, numeric_var_names,
+ mean_cov, var_cov_mat){
+
+  # Generate pseudo-responses per cluster/group
+  n_h <- unlist(lapply(mean_cov, function(df) df[1,'n']))
+  y_mean <- vapply(mean_cov, function(df) df[df$variable == y_name, 'std_mean'], numeric(1))
+  y_syn <- lapply(seq_along(y_mean), function(i){
+    n.events <- round(n_h[i] * y_mean[i])
+    sample(c(rep(1, n.events),
+      rep(0, n_h[i] - n.events)), n_h[i])
+    })
+  
+  # Generate pseudo-data per cluster
+  m <- length(mean_cov)
+  pseudo_data_2nd_mom <- lapply(1:m, function(group_num){
+    # Use y_syn as first column
+    syn_df_2nd_mom <- data.frame(y_syn[[group_num]])
+    names(syn_df_2nd_mom) <- y_name
+
+    # Continue with the covariates
+    for(name_ind in names_ind_vars){
+      syn_df_2nd_mom <- gen_pseudo(moment = 2, y_syn[[group_num]], name_ind, numeric_var_names, 
+          syn_df_2nd_mom, mean_cov[[group_num]], var_cov_mat[[group_num]])
+      names(syn_df_2nd_mom)[ncol(syn_df_2nd_mom)] <- name_ind
+      print(paste0('grp ', group_num, '; ', 'syn_df_2nd_mom; ', name_ind, ' is finished'))
+    }
+    syn_df_2nd_mom$level2 <- group_num
+    syn_df_2nd_mom
+  })
+  
+  # Unstandardize numeric pseudo-data
+  unstd_syn_df_2nd_mom <- lapply(1:m, function(group_num){
+    df <- pseudo_data_2nd_mom[[group_num]]
+    mean_cov_ <- mean_cov[[group_num]]
+    as.data.frame(sapply(names(df), function(name){
+      x.variance <- mean_cov_[mean_cov_[, 'variable'] == name, 'variance']
+      x.mean <- mean_cov_[mean_cov_[, 'variable'] == name, 'mean']
+      if(name %in% numeric_var_names){
+        df[, name] * sqrt(x.variance) + x.mean
+        } else{df[, name]}
+  }))})
+  pseudodata_2ndmom <- unstd_syn_df_2nd_mom
+  ## Save pseudo-data in the interest of time
+  save(pseudodata_2ndmom, file = file.path("DEMO", "ps", "pseudodata_2ndmom.RData"))
+  
+  return(pseudodata_2ndmom)
+}
